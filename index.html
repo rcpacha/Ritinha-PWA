@@ -7,10 +7,11 @@
     <!-- Tailwind CSS for styling -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Google Fonts: Inter -->
-    <link rel="manifest" href="manifest.json">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- **MODIFICATION**: Link to the manifest file for PWA functionality -->
+    <link rel="manifest" href="manifest.json">
     <style>
         /* Custom styles */
         body {
@@ -29,7 +30,6 @@
         @keyframes pop-in {
             to { opacity: 1; transform: translateY(0); }
         }
-        /* Estilo para o cursor piscando durante o streaming */
         .blinking-cursor {
             animation: blink 1s step-end infinite;
         }
@@ -73,7 +73,8 @@
             <div class="flex items-center space-x-3">
                 <textarea id="user-input" class="flex-1 p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-400 transition resize-none bg-white text-gray-800 placeholder-gray-500 text-base" placeholder="Escreva para a Ritinha..." rows="1"></textarea>
                 <button id="send-button" class="bg-red-500 text-white p-3 rounded-lg hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-red-400 focus:ring-offset-2 transition-transform transform active:scale-95 disabled:bg-gray-400 disabled:cursor-not-allowed">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-send"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+                    <!-- **FIX**: Corrected the viewBox attribute from "0 0 24" to "0 0 24 24" -->
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-send"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
                 </button>
             </div>
         </footer>
@@ -83,8 +84,6 @@
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-app.js";
         import { getFirestore, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-firestore.js";
 
-        // --- Firebase Config: Keys are exposed for local file execution context ---
-        // In a production environment, these should be handled via a secure backend.
         const firebaseConfig = {
           apiKey: "AIzaSyCPVc6lrPUY6akc1egHtqnLmfnLv4CUhzc",
           authDomain: "mapa-idealizado.firebaseapp.com",
@@ -104,7 +103,6 @@
             document.getElementById('lock-screen-message').textContent = 'Erro ao ligar à base de dados.';
         }
 
-        // --- DOM ELEMENTS ---
         const lockScreen = document.getElementById('lock-screen');
         const lockScreenMessage = document.getElementById('lock-screen-message');
         const passwordForm = document.getElementById('password-form');
@@ -117,23 +115,20 @@
         const sendButton = document.getElementById('send-button');
         const statusIndicator = document.getElementById('status-indicator');
         
-        // --- CONFIG & STATE ---
         let correctPassword = null;
         let ritinhaPrompt = null;
         let refinerPrompt = null;
         const chatDocumentId = "conversa_marilia_principal_v2"; 
         let isSaving = false;
-        let fullChatHistory = []; // Stores the complete history from Firestore
-        let chatHistoryForAPI = []; // Stores the history formatted for the API call
+        let fullChatHistory = [];
+        let chatHistoryForAPI = [];
 
-        // --- API Keys & URLs ---
         const defaultApiKey = "AIzaSyBHZAy77Ju1ibTeBVWdGaVg9U8XKybKlsA";
         const gemmaApiKey = "AIzaSyBHZAy77Ju1ibTeBVWdGaVg9U8XKybKlsA";
 
         const refinerApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemma-3-27b-it:generateContent?key=${gemmaApiKey}`;
         const ritinhaApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:streamGenerateContent?key=${defaultApiKey}&alt=sse`;
 
-        // --- FUNCTIONS ---
         const sanitizeResponse = (text) => text ? text.replace(/\*\*(.*?)\*\*/g, '$1').replace(/\*(.*?)\*/g, '$1').replace(/^#+\s/gm, '').replace(/^- /gm, '') : "";
         
         const appendMessage = (sender, text, animate = true, timestampStr = null) => {
@@ -239,7 +234,6 @@
             let fullBotResponse = '';
 
             try {
-                // Step 1: Refine user's input
                 setStatus('A refinar a mensagem...');
                 const refinerPayload = { contents: [{ parts: [{ text: `${refinerPrompt}\n\nMensagem original da utilizadora: "${rawMessageText}"` }] }] };
                 const refinerResponse = await fetch(refinerApiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(refinerPayload) });
@@ -250,26 +244,18 @@
                 } else {
                     console.warn("Agente refinador falhou. A usar mensagem original.");
                 }
-                
-                console.log("Input Original:", rawMessageText);
-                console.log("Input Refinado Enviado para Ritinha:", refinedMessage);
 
-                // Prepare history for API, using the last 10 turns for context
                 chatHistoryForAPI = fullChatHistory.slice(-10).flatMap(turn => [
                     { role: "user", parts: [{ text: turn.user_refined }] },
                     { role: "model", parts: [{ text: turn.model_response }] }
                 ]);
 
-                // **MODIFICATION**: Inject a runtime instruction for conversation continuity.
                 const continuationInstruction = "Atenção, Ritinha: O histórico recente da conversa é fornecido a seguir para seu contexto. Sua tarefa é analisar estas últimas trocas de mensagens e continuar a conversa a partir da última interação, de forma coesa e natural, como se o diálogo nunca tivesse sido interrompido. Responda diretamente à última mensagem da usuária, mantendo o fluxo da conversa.";
                 const runtimePrompt = `${ritinhaPrompt}\n\n---\n\n**Instrução de Continuidade (Regra de Hoje):**\n${continuationInstruction}`;
                 
-                // Add the main prompt (with instruction) and the new refined message
                 chatHistoryForAPI.unshift({ role: "user", parts: [{ text: runtimePrompt }] });
                 chatHistoryForAPI.push({ role: "user", parts: [{ text: refinedMessage }] });
 
-
-                // Step 2: Send refined input to Ritinha and process the stream
                 setStatus('A Ritinha está a pensar...');
                 const ritinhaPayload = { contents: chatHistoryForAPI };
                 const ritinhaResponseFetch = await fetch(ritinhaApiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(ritinhaPayload) });
@@ -358,7 +344,6 @@
                      chatWindow.prepend(notice);
                 }
 
-
                 userInput.disabled = false;
                 sendButton.disabled = false;
                 userInput.focus();
@@ -414,7 +399,6 @@
             }
         };
 
-        // --- EVENT LISTENERS ---
         passwordForm.addEventListener('submit', handleLogin);
         sendButton.addEventListener('click', handleSendMessage);
         userInput.addEventListener('keydown', (e) => {
@@ -428,20 +412,23 @@
             userInput.style.height = (userInput.scrollHeight) + 'px';
         });
 
-        // --- INITIALIZATION ---
         window.onload = loadConfigAndInitialize;
-	<script>
-  if ('serviceWorker' in navigator) {
-    window.addEventListener('load', () => {
-      navigator.serviceWorker.register('./serviceworker.js')
-        .then(registration => {
-          console.log('Service Worker da Ritinha registrado com sucesso.');
-        })
-        .catch(error => {
-          console.log('Falha no registro do Service Worker:', error);
+
+    </script>
+
+    <!-- **MODIFICATION**: Script to register the service worker for PWA functionality -->
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('./service-worker.js')
+            .then(registration => {
+              console.log('Service Worker da Ritinha registrado com sucesso.');
+            })
+            .catch(error => {
+              console.log('Falha no registro do Service Worker:', error);
+            });
         });
-    });
-  }
+      }
     </script>
 </body>
 </html>
