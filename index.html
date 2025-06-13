@@ -73,7 +73,6 @@
             <div class="flex items-center space-x-3">
                 <textarea id="user-input" class="flex-1 p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-400 transition resize-none bg-white text-gray-800 placeholder-gray-500 text-base" placeholder="Escreva para a Ritinha..." rows="1"></textarea>
                 <button id="send-button" class="bg-red-500 text-white p-3 rounded-lg hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-red-400 focus:ring-offset-2 transition-transform transform active:scale-95 disabled:bg-gray-400 disabled:cursor-not-allowed">
-                    <!-- **FIX**: Corrected the viewBox attribute from "0 0 24" to "0 0 24 24" -->
                     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-send"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
                 </button>
             </div>
@@ -416,13 +415,14 @@
 
     </script>
 
-    <!-- **MODIFICATION**: Script to register the service worker for PWA functionality -->
+    <!-- **MODIFICATION**: Script to register the service worker for PWA functionality. Corrected path from './serviceworker.js' to '/Ritinha-PWA/serviceworker.js' -->
     <script>
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
-          navigator.serviceWorker.register('./service-worker.js')
+          // The path should be relative to the root of the domain, including the repository name.
+          navigator.serviceWorker.register('/Ritinha-PWA/service-worker.js')
             .then(registration => {
-              console.log('Service Worker da Ritinha registrado com sucesso.');
+              console.log('Service Worker da Ritinha registrado com sucesso: ', registration.scope);
             })
             .catch(error => {
               console.log('Falha no registro do Service Worker:', error);
