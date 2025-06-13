@@ -1,0 +1,21 @@
+{
+  "name": "Ritinha - Sua Parceira",
+  "short_name": "Ritinha",
+  "description": "Sua assistente pessoal para o dia a dia.",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#fef2f2",
+  "theme_color": "#ef4444",
+  "icons": [
+    {
+      "src": "icone.png",
+      "type": "image/png",
+      "sizes": "192x192"
+    },
+    {
+      "src": "icone.png",
+      "type": "image/png",
+      "sizes": "512x512"
+    }
+  ]
+}

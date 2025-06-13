@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chatbot - Ritinha</title>
+    <!-- Tailwind CSS for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts: Inter -->
+    <link rel="manifest" href="manifest.json">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        /* Custom styles */
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #fef2f2; /* red-50 */
+        }
+        #chat-window::-webkit-scrollbar { width: 8px; }
+        #chat-window::-webkit-scrollbar-track { background: #fee2e2; /* red-100 */ }
+        #chat-window::-webkit-scrollbar-thumb { background: #fca5a5; /* red-300 */ border-radius: 4px; }
+        #chat-window::-webkit-scrollbar-thumb:hover { background: #f87171; /* red-400 */ }
+        .chat-bubble-animated {
+            opacity: 0;
+            transform: translateY(20px);
+            animation: pop-in 0.3s forwards;
+        }
+        @keyframes pop-in {
+            to { opacity: 1; transform: translateY(0); }
+        }
+        /* Estilo para o cursor piscando durante o streaming */
+        .blinking-cursor {
+            animation: blink 1s step-end infinite;
+        }
+        @keyframes blink {
+            from, to { border-right-color: transparent; }
+            50% { border-right-color: #333; }
+        }
+    </style>
+</head>
+<body class="bg-red-50 flex items-center justify-center h-screen p-2 md:p-4">
+
+    <!-- Lock Screen -->
+    <div id="lock-screen" class="w-full max-w-md p-8 space-y-6 bg-white rounded-2xl shadow-xl border border-red-200">
+        <div class="text-center">
+            <h1 class="text-2xl font-bold text-red-800">Acesso à Ritinha</h1>
+            <p id="lock-screen-message" class="text-gray-600 mt-2">A carregar configurações...</p>
+        </div>
+        <form id="password-form" class="space-y-4">
+            <div>
+                <label for="password-input" class="sr-only">Senha</label>
+                <input id="password-input" name="password" type="password" required class="w-full px-4 py-2 text-gray-800 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-400" placeholder="Senha" disabled>
+            </div>
+            <p id="error-message" class="text-red-500 text-sm text-center h-4"></p>
+            <button id="login-button" type="submit" class="w-full px-4 py-2 font-semibold text-white bg-red-500 rounded-lg hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-red-400 focus:ring-offset-2 transition-colors disabled:bg-red-300" disabled>
+                Entrar
+            </button>
+        </form>
+    </div>
+
+    <!-- Main chat container (hidden by default) -->
+    <div id="chat-container" class="w-full max-w-7xl h-full md:h-[95vh] md:max-h-[900px] bg-white rounded-2xl shadow-xl flex-col border border-red-200 hidden">
+        <header class="bg-white text-red-800 p-4 rounded-t-2xl flex items-center justify-center relative flex-shrink-0 border-b border-red-100">
+            <h1 class="text-xl font-semibold">Ritinha - Sua Amiga e Parceira</h1>
+        </header>
+
+        <main id="chat-window" class="flex-1 p-6 overflow-y-auto space-y-6 bg-white"></main>
+
+        <div id="status-indicator" class="px-6 py-2 text-gray-500 text-sm h-8 text-center"></div>
+
+        <footer class="p-4 bg-white border-t border-red-100 rounded-b-2xl flex-shrink-0">
+            <div class="flex items-center space-x-3">
+                <textarea id="user-input" class="flex-1 p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-400 transition resize-none bg-white text-gray-800 placeholder-gray-500 text-base" placeholder="Escreva para a Ritinha..." rows="1"></textarea>
+                <button id="send-button" class="bg-red-500 text-white p-3 rounded-lg hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-red-400 focus:ring-offset-2 transition-transform transform active:scale-95 disabled:bg-gray-400 disabled:cursor-not-allowed">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-send"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+                </button>
+            </div>
+        </footer>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-app.js";
+        import { getFirestore, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-firestore.js";
+
+        // --- Firebase Config: Keys are exposed for local file execution context ---
+        // In a production environment, these should be handled via a secure backend.
+        const firebaseConfig = {
+          apiKey: "AIzaSyCPVc6lrPUY6akc1egHtqnLmfnLv4CUhzc",
+          authDomain: "mapa-idealizado.firebaseapp.com",
+          projectId: "mapa-idealizado",
+          storageBucket: "mapa-idealizado.appspot.com",
+          messagingSenderId: "491058966116",
+          appId: "1:491058966116:web:e88d3b4315c1a92d827971",
+          measurementId: "G-4MG8RX6MPN"
+        };
+        
+        let db;
+        try {
+            const app = initializeApp(firebaseConfig);
+            db = getFirestore(app);
+        } catch(e) {
+            console.error("Firebase initialization error:", e);
+            document.getElementById('lock-screen-message').textContent = 'Erro ao ligar à base de dados.';
+        }
+
+        // --- DOM ELEMENTS ---
+        const lockScreen = document.getElementById('lock-screen');
+        const lockScreenMessage = document.getElementById('lock-screen-message');
+        const passwordForm = document.getElementById('password-form');
+        const passwordInput = document.getElementById('password-input');
+        const loginButton = document.getElementById('login-button');
+        const errorMessage = document.getElementById('error-message');
+        const chatContainer = document.getElementById('chat-container');
+        const chatWindow = document.getElementById('chat-window');
+        const userInput = document.getElementById('user-input');
+        const sendButton = document.getElementById('send-button');
+        const statusIndicator = document.getElementById('status-indicator');
+        
+        // --- CONFIG & STATE ---
+        let correctPassword = null;
+        let ritinhaPrompt = null;
+        let refinerPrompt = null;
+        const chatDocumentId = "conversa_marilia_principal_v2"; 
+        let isSaving = false;
+        let fullChatHistory = []; // Stores the complete history from Firestore
+        let chatHistoryForAPI = []; // Stores the history formatted for the API call
+
+        // --- API Keys & URLs ---
+        const defaultApiKey = "AIzaSyBHZAy77Ju1ibTeBVWdGaVg9U8XKybKlsA";
+        const gemmaApiKey = "AIzaSyBHZAy77Ju1ibTeBVWdGaVg9U8XKybKlsA";
+
+        const refinerApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemma-3-27b-it:generateContent?key=${gemmaApiKey}`;
+        const ritinhaApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:streamGenerateContent?key=${defaultApiKey}&alt=sse`;
+
+        // --- FUNCTIONS ---
+        const sanitizeResponse = (text) => text ? text.replace(/\*\*(.*?)\*\*/g, '$1').replace(/\*(.*?)\*/g, '$1').replace(/^#+\s/gm, '').replace(/^- /gm, '') : "";
+        
+        const appendMessage = (sender, text, animate = true, timestampStr = null) => {
+            const messageId = `msg-${Date.now()}-${Math.random()}`;
+            const messageWrapper = document.createElement('div');
+            messageWrapper.className = `flex w-full ${sender === 'user' ? 'justify-end' : 'justify-start'}`;
+            if (animate) messageWrapper.classList.add('chat-bubble-animated');
+
+            const bubbleAndStamp = document.createElement('div');
+            bubbleAndStamp.className = `flex flex-col max-w-2xl ${sender === 'user' ? 'items-end' : 'items-start'}`;
+
+            const messageBubble = document.createElement('div');
+            messageBubble.id = messageId;
+            messageBubble.className = 'p-3 rounded-xl shadow-sm whitespace-pre-wrap text-base'; 
+            messageBubble.classList.add(sender === 'user' ? 'bg-red-600' : 'bg-gray-200', sender === 'user' ? 'text-white' : 'text-gray-800');
+            messageBubble.textContent = text;
+            
+            bubbleAndStamp.appendChild(messageBubble);
+            
+            const timestamp = timestampStr 
+                ? new Date(timestampStr).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+                : new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+
+            const timestampEl = document.createElement('div');
+            timestampEl.className = 'text-xs text-gray-500 mt-1 px-1';
+            timestampEl.textContent = timestamp;
+            bubbleAndStamp.appendChild(timestampEl);
+
+            messageWrapper.appendChild(bubbleAndStamp);
+            chatWindow.appendChild(messageWrapper);
+            chatWindow.scrollTop = chatWindow.scrollHeight;
+            
+            return messageId;
+        };
+        
+        const updateMessage = (messageId, chunk) => {
+            const messageBubble = document.getElementById(messageId);
+            if(messageBubble) {
+                const cursor = messageBubble.querySelector('.blinking-cursor');
+                if (cursor) cursor.remove();
+
+                messageBubble.textContent += chunk;
+                const newCursor = document.createElement('span');
+                newCursor.className = 'blinking-cursor border-r-2 border-transparent';
+                newCursor.innerHTML = '&nbsp;';
+                messageBubble.appendChild(newCursor);
+                
+                chatWindow.scrollTop = chatWindow.scrollHeight;
+            }
+        };
+
+        const finalizeMessage = (messageId) => {
+             const messageBubble = document.getElementById(messageId);
+             if(messageBubble) {
+                const cursor = messageBubble.querySelector('.blinking-cursor');
+                if (cursor) cursor.remove();
+             }
+        }
+
+        const setStatus = (message, isError = false) => {
+            statusIndicator.textContent = message;
+            statusIndicator.style.color = isError ? '#ef4444' : '#6b7280';
+        }
+
+        const setLoading = (isLoading) => {
+            sendButton.disabled = isLoading;
+            userInput.disabled = isLoading;
+            if (isLoading) {
+                 setStatus('A Ritinha está a pensar...');
+            } else {
+                 userInput.focus();
+            }
+        };
+
+        const saveOrUpdateLog = async () => {
+            if (!db || isSaving) return;
+            isSaving = true;
+            setStatus('A atualizar registo...');
+            try {
+                await setDoc(doc(db, "chat_logs_ritinha", chatDocumentId), {
+                    updatedAt: new Date(),
+                    conversation: fullChatHistory 
+                });
+                setStatus('Registo guardado com sucesso!');
+            } catch (e) {
+                console.error("Error writing document: ", e);
+                setStatus('Erro ao guardar a conversa.', true);
+            } finally {
+                isSaving = false;
+                setTimeout(() => { if (!isSaving && !sendButton.disabled) setStatus(''); }, 2500);
+            }
+        };
+        
+        const handleSendMessage = async () => {
+            const rawMessageText = userInput.value.trim();
+            if (!rawMessageText) return;
+
+            appendMessage('user', rawMessageText);
+            setLoading(true);
+            userInput.value = '';
+            userInput.style.height = 'auto';
+            let refinedMessage = rawMessageText; 
+            let fullBotResponse = '';
+
+            try {
+                // Step 1: Refine user's input
+                setStatus('A refinar a mensagem...');
+                const refinerPayload = { contents: [{ parts: [{ text: `${refinerPrompt}\n\nMensagem original da utilizadora: "${rawMessageText}"` }] }] };
+                const refinerResponse = await fetch(refinerApiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(refinerPayload) });
+
+                if (refinerResponse.ok) {
+                    const refinerResult = await refinerResponse.json();
+                    refinedMessage = refinerResult.candidates?.[0]?.content?.parts?.[0]?.text || rawMessageText;
+                } else {
+                    console.warn("Agente refinador falhou. A usar mensagem original.");
+                }
+                
+                console.log("Input Original:", rawMessageText);
+                console.log("Input Refinado Enviado para Ritinha:", refinedMessage);
+
+                // Prepare history for API, using the last 10 turns for context
+                chatHistoryForAPI = fullChatHistory.slice(-10).flatMap(turn => [
+                    { role: "user", parts: [{ text: turn.user_refined }] },
+                    { role: "model", parts: [{ text: turn.model_response }] }
+                ]);
+
+                // **MODIFICATION**: Inject a runtime instruction for conversation continuity.
+                const continuationInstruction = "Atenção, Ritinha: O histórico recente da conversa é fornecido a seguir para seu contexto. Sua tarefa é analisar estas últimas trocas de mensagens e continuar a conversa a partir da última interação, de forma coesa e natural, como se o diálogo nunca tivesse sido interrompido. Responda diretamente à última mensagem da usuária, mantendo o fluxo da conversa.";
+                const runtimePrompt = `${ritinhaPrompt}\n\n---\n\n**Instrução de Continuidade (Regra de Hoje):**\n${continuationInstruction}`;
+                
+                // Add the main prompt (with instruction) and the new refined message
+                chatHistoryForAPI.unshift({ role: "user", parts: [{ text: runtimePrompt }] });
+                chatHistoryForAPI.push({ role: "user", parts: [{ text: refinedMessage }] });
+
+
+                // Step 2: Send refined input to Ritinha and process the stream
+                setStatus('A Ritinha está a pensar...');
+                const ritinhaPayload = { contents: chatHistoryForAPI };
+                const ritinhaResponseFetch = await fetch(ritinhaApiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(ritinhaPayload) });
+                if (!ritinhaResponseFetch.ok) throw new Error(`API da Ritinha falhou (${ritinhaResponseFetch.status})`);
+
+                const botMessageId = appendMessage('bot', '', true);
+                
+                const reader = ritinhaResponseFetch.body.getReader();
+                const decoder = new TextDecoder();
+                
+                while (true) {
+                    const { value, done } = await reader.read();
+                    if (done) break;
+                    
+                    const chunk = decoder.decode(value);
+                    const lines = chunk.split('\n');
+                    for (const line of lines) {
+                        if (line.startsWith('data: ')) {
+                            const jsonStr = line.substring(6).trim();
+                            if (jsonStr) {
+                                try {
+                                    const parsed = JSON.parse(jsonStr);
+                                    const textChunk = parsed.candidates?.[0]?.content?.parts?.[0]?.text || '';
+                                    if (textChunk) {
+                                        const sanitizedChunk = sanitizeResponse(textChunk);
+                                        fullBotResponse += sanitizedChunk;
+                                        updateMessage(botMessageId, sanitizedChunk);
+                                    }
+                                } catch (e) {
+                                    console.warn("Could not parse JSON chunk:", jsonStr);
+                                }
+                            }
+                        }
+                    }
+                }
+                finalizeMessage(botMessageId);
+
+                const turnLog = {
+                    timestamp: new Date().toISOString(),
+                    user_original: rawMessageText,
+                    user_refined: refinedMessage,
+                    model_response: fullBotResponse
+                };
+                fullChatHistory.push(turnLog);
+                
+                await saveOrUpdateLog();
+
+            } catch (error) {
+                console.error("Error in dual-agent process:", error);
+                setStatus(`Erro na comunicação: ${error.message}`, true);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        const loadChatHistory = async () => {
+            setStatus('A ligar à Ritinha...');
+            userInput.disabled = true;
+            sendButton.disabled = true;
+            try {
+                if (!db) throw new Error("A conexão com a base de dados falhou.");
+                const docRef = doc(db, "chat_logs_ritinha", chatDocumentId);
+                const docSnap = await getDoc(docRef);
+                
+                if (docSnap.exists() && docSnap.data().conversation?.length > 0) {
+                    fullChatHistory = docSnap.data().conversation;
+                    setStatus('Histórico carregado. Bem-vinda de volta!');
+                } else {
+                    fullChatHistory = []; 
+                    setStatus('Tudo pronto para começar!');
+                }
+                
+                chatWindow.innerHTML = ''; 
+                
+                const historyToDisplay = fullChatHistory.slice(-10);
+                
+                historyToDisplay.forEach(turn => {
+                    appendMessage('user', sanitizeResponse(turn.user_original), false, turn.timestamp);
+                    appendMessage('bot', sanitizeResponse(turn.model_response), false, turn.timestamp);
+                });
+
+                if (historyToDisplay.length < fullChatHistory.length && fullChatHistory.length > 0) {
+                     const notice = document.createElement('div');
+                     notice.className = 'text-center text-xs text-gray-400 py-2';
+                     notice.textContent = `Mostrando as últimas ${historyToDisplay.length} de ${fullChatHistory.length} interações. O histórico completo está guardado.`;
+                     chatWindow.prepend(notice);
+                }
+
+
+                userInput.disabled = false;
+                sendButton.disabled = false;
+                userInput.focus();
+                setTimeout(() => setStatus(''), 3000);
+
+            } catch (error) {
+                console.error("Erro ao carregar o histórico: ", error);
+                setStatus('Não foi possível carregar o histórico.', true);
+            }
+        };
+
+        const handleLogin = async (event) => {
+            event.preventDefault();
+            const enteredPassword = passwordInput.value;
+            if (enteredPassword === correctPassword) {
+                lockScreen.classList.add('hidden');
+                chatContainer.classList.remove('hidden');
+                chatContainer.classList.add('flex');
+                await loadChatHistory(); 
+            } else {
+                errorMessage.textContent = 'Senha incorreta. Tente novamente.';
+                passwordInput.value = '';
+                passwordInput.focus();
+            }
+        };
+
+        const loadConfigAndInitialize = async () => {
+            try {
+                if (!db) throw new Error("A conexão com a base de dados falhou.");
+                const configRef = doc(db, "configuracoes", "ritinha_config");
+                const configSnap = await getDoc(configRef);
+                if (configSnap.exists()) {
+                    const configData = configSnap.data();
+                    
+                    correctPassword = configData.senha_acesso;
+                    ritinhaPrompt = configData.prompt_agent;
+                    refinerPrompt = configData.prompt_refinador || "Você vai reescrever a mensagem a seguir na primeira pessoa, como se fosse a Marília, uma senhora de 66 anos. Sua tarefa é transformar a intenção da mensagem original numa pergunta ou afirmação mais completa e contextualizada para a assistente dela, a Ritinha. Importante: adicione uma instrução para que a Ritinha responda de forma concisa e direta, 'economizando palavras' e evitando 'textões'. A sua resposta deve ser apenas o texto reescrito, sem introduções ou explicações.";
+
+                    if (!correctPassword) throw new Error("O campo 'senha_acesso' não foi encontrado.");
+                    if (!ritinhaPrompt) throw new Error("O campo 'prompt_agent' não foi encontrado.");
+                    
+                    lockScreenMessage.textContent = 'Por favor, insira a senha para continuar.';
+                    passwordInput.disabled = false;
+                    loginButton.disabled = false;
+                    passwordInput.focus();
+                } else {
+                    throw new Error("Ficheiro de configuração 'ritinha_config' não encontrado.");
+                }
+            } catch (error) {
+                console.error("Erro ao carregar configuração: ", error);
+                lockScreenMessage.textContent = `Erro: ${error.message}`;
+                lockScreenMessage.classList.add('text-red-500');
+            }
+        };
+
+        // --- EVENT LISTENERS ---
+        passwordForm.addEventListener('submit', handleLogin);
+        sendButton.addEventListener('click', handleSendMessage);
+        userInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                handleSendMessage();
+            }
+        });
+        userInput.addEventListener('input', () => {
+            userInput.style.height = 'auto';
+            userInput.style.height = (userInput.scrollHeight) + 'px';
+        });
+
+        // --- INITIALIZATION ---
+        window.onload = loadConfigAndInitialize;
+	<script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('./serviceworker.js')
+        .then(registration => {
+          console.log('Service Worker da Ritinha registrado com sucesso.');
+        })
+        .catch(error => {
+          console.log('Falha no registro do Service Worker:', error);
+        });
+    });
+  }
+    </script>
+</body>
+</html>
