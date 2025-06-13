@@ -12,7 +12,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <!-- **MODIFICATION**: Link to the manifest file for PWA functionality -->
     <link rel="manifest" href="manifest.json">
-   <style>
+    <style>
         /* Custom styles */
         body {
             font-family: 'Inter', sans-serif;
@@ -30,7 +30,6 @@
         @keyframes pop-in {
             to { opacity: 1; transform: translateY(0); }
         }
-        /* Estilo para o cursor piscando durante o streaming */
         .blinking-cursor {
             animation: blink 1s step-end infinite;
         }
@@ -74,7 +73,7 @@
             <div class="flex items-center space-x-3">
                 <textarea id="user-input" class="flex-1 p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-400 transition resize-none bg-white text-gray-800 placeholder-gray-500 text-base" placeholder="Escreva para a Ritinha..." rows="1"></textarea>
                 <button id="send-button" class="bg-red-500 text-white p-3 rounded-lg hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-red-400 focus:ring-offset-2 transition-transform transform active:scale-95 disabled:bg-gray-400 disabled:cursor-not-allowed">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-send"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-send"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
                 </button>
             </div>
         </footer>
@@ -84,7 +83,6 @@
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-app.js";
         import { getFirestore, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-firestore.js";
 
-        // --- Firebase Config ---
         const firebaseConfig = {
           apiKey: "AIzaSyCPVc6lrPUY6akc1egHtqnLmfnLv4CUhzc",
           authDomain: "mapa-idealizado.firebaseapp.com",
@@ -104,7 +102,6 @@
             document.getElementById('lock-screen-message').textContent = 'Erro ao ligar à base de dados.';
         }
 
-        // --- DOM ELEMENTS ---
         const lockScreen = document.getElementById('lock-screen');
         const lockScreenMessage = document.getElementById('lock-screen-message');
         const passwordForm = document.getElementById('password-form');
@@ -117,7 +114,6 @@
         const sendButton = document.getElementById('send-button');
         const statusIndicator = document.getElementById('status-indicator');
         
-        // --- CONFIG & STATE ---
         let correctPassword = null;
         let ritinhaPrompt = null;
         let refinerPrompt = null;
@@ -126,13 +122,12 @@
         let fullChatHistory = [];
         let chatHistoryForAPI = [];
 
-        // --- API Keys & URLs (will be populated from Firestore) ---
-        let ritinhaApiKey = null;
-        let gemmaApiKey = null;
-        let refinerApiUrl = null;
-        let ritinhaApiUrl = null;
+        const defaultApiKey = "AIzaSyBHZAy77Ju1ibTeBVWdGaVg9U8XKybKlsA";
+        const gemmaApiKey = "AIzaSyBHZAy77Ju1ibTeBVWdGaVg9U8XKybKlsA";
 
-        // --- FUNCTIONS ---
+        const refinerApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemma-3-27b-it:generateContent?key=${gemmaApiKey}`;
+        const ritinhaApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:streamGenerateContent?key=${defaultApiKey}&alt=sse`;
+
         const sanitizeResponse = (text) => text ? text.replace(/\*\*(.*?)\*\*/g, '$1').replace(/\*(.*?)\*/g, '$1').replace(/^#+\s/gm, '').replace(/^- /gm, '') : "";
         
         const appendMessage = (sender, text, animate = true, timestampStr = null) => {
@@ -228,7 +223,7 @@
         
         const handleSendMessage = async () => {
             const rawMessageText = userInput.value.trim();
-            if (!rawMessageText || !refinerApiUrl || !ritinhaApiUrl) return;
+            if (!rawMessageText) return;
 
             appendMessage('user', rawMessageText);
             setLoading(true);
@@ -238,7 +233,6 @@
             let fullBotResponse = '';
 
             try {
-                // Step 1: Refine user's input
                 setStatus('A refinar a mensagem...');
                 const refinerPayload = { contents: [{ parts: [{ text: `${refinerPrompt}\n\nMensagem original da utilizadora: "${rawMessageText}"` }] }] };
                 const refinerResponse = await fetch(refinerApiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(refinerPayload) });
@@ -249,8 +243,7 @@
                 } else {
                     console.warn("Agente refinador falhou. A usar mensagem original.");
                 }
-                
-                // Step 2: Prepare history and send refined input to Ritinha
+
                 chatHistoryForAPI = fullChatHistory.slice(-10).flatMap(turn => [
                     { role: "user", parts: [{ text: turn.user_refined }] },
                     { role: "model", parts: [{ text: turn.model_response }] }
@@ -268,6 +261,7 @@
                 if (!ritinhaResponseFetch.ok) throw new Error(`API da Ritinha falhou (${ritinhaResponseFetch.status})`);
 
                 const botMessageId = appendMessage('bot', '', true);
+                
                 const reader = ritinhaResponseFetch.body.getReader();
                 const decoder = new TextDecoder();
                 
@@ -289,7 +283,9 @@
                                         fullBotResponse += sanitizedChunk;
                                         updateMessage(botMessageId, sanitizedChunk);
                                     }
-                                } catch (e) { console.warn("Could not parse JSON chunk:", jsonStr); }
+                                } catch (e) {
+                                    console.warn("Could not parse JSON chunk:", jsonStr);
+                                }
                             }
                         }
                     }
@@ -332,6 +328,7 @@
                 }
                 
                 chatWindow.innerHTML = ''; 
+                
                 const historyToDisplay = fullChatHistory.slice(-10);
                 
                 historyToDisplay.forEach(turn => {
@@ -375,42 +372,25 @@
         const loadConfigAndInitialize = async () => {
             try {
                 if (!db) throw new Error("A conexão com a base de dados falhou.");
-
-                // Fetch Admin Config (password, prompts)
                 const configRef = doc(db, "configuracoes", "ritinha_config");
                 const configSnap = await getDoc(configRef);
                 if (configSnap.exists()) {
                     const configData = configSnap.data();
+                    
                     correctPassword = configData.senha_acesso;
                     ritinhaPrompt = configData.prompt_agent;
                     refinerPrompt = configData.prompt_refinador || "Você vai reescrever a mensagem a seguir na primeira pessoa, como se fosse a Marília, uma senhora de 66 anos. Sua tarefa é transformar a intenção da mensagem original numa pergunta ou afirmação mais completa e contextualizada para a assistente dela, a Ritinha. Importante: adicione uma instrução para que a Ritinha responda de forma concisa e direta, 'economizando palavras' e evitando 'textões'. A sua resposta deve ser apenas o texto reescrito, sem introduções ou explicações.";
+
+                    if (!correctPassword) throw new Error("O campo 'senha_acesso' não foi encontrado.");
+                    if (!ritinhaPrompt) throw new Error("O campo 'prompt_agent' não foi encontrado.");
+                    
+                    lockScreenMessage.textContent = 'Por favor, insira a senha para continuar.';
+                    passwordInput.disabled = false;
+                    loginButton.disabled = false;
+                    passwordInput.focus();
                 } else {
                     throw new Error("Ficheiro de configuração 'ritinha_config' não encontrado.");
                 }
-
-                // Fetch Chatbot API Keys
-                const keysRef = doc(db, "configuracoes", "chatbot_config");
-                const keysSnap = await getDoc(keysRef);
-                if (keysSnap.exists()) {
-                    const keysData = keysSnap.data();
-                    ritinhaApiKey = keysData.geminiApiKey;
-                    gemmaApiKey = keysData.gemmaApiKey;
-                    if (!ritinhaApiKey || !gemmaApiKey) {
-                        throw new Error("As chaves de API não foram encontradas no documento 'chatbot_config'.");
-                    }
-                    // Construct URLs now that keys are loaded
-                    ritinhaApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:streamGenerateContent?key=${ritinhaApiKey}&alt=sse`;
-                    refinerApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemma-3-27b-it:generateContent?key=${gemmaApiKey}`;
-                } else {
-                     throw new Error("Ficheiro de configuração 'chatbot_config' não encontrado.");
-                }
-                
-                // If all configs are loaded, enable the login
-                lockScreenMessage.textContent = 'Por favor, insira a senha para continuar.';
-                passwordInput.disabled = false;
-                loginButton.disabled = false;
-                passwordInput.focus();
-
             } catch (error) {
                 console.error("Erro ao carregar configuração: ", error);
                 lockScreenMessage.textContent = `Erro: ${error.message}`;
@@ -418,7 +398,6 @@
             }
         };
 
-        // --- EVENT LISTENERS ---
         passwordForm.addEventListener('submit', handleLogin);
         sendButton.addEventListener('click', handleSendMessage);
         userInput.addEventListener('keydown', (e) => {
@@ -432,9 +411,9 @@
             userInput.style.height = (userInput.scrollHeight) + 'px';
         });
 
-        // --- INITIALIZATION ---
         window.onload = loadConfigAndInitialize;
 
+    </script>
 
     <!-- **MODIFICATION**: Script to register the service worker for PWA functionality. Corrected path from './serviceworker.js' to '/Ritinha-PWA/serviceworker.js' -->
     <script>
